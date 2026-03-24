@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Frazley - Real-time Multiplayer Word Game</title>
+    <link rel="stylesheet" href="/style.css" />
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <!-- View 1: Join / Create -->
+    <div id="view-join" class="view active">
+      <h1>Frazley</h1>
+      <p class="subtitle">Real-time Multiplayer Word Game</p>
+      
+      <div class="input-group">
+        <label for="player-name">Your Name</label>
+        <input type="text" id="player-name" placeholder="Enter your name" maxlength="15" />
+      </div>
+
+      <button id="btn-create-room" class="primary-btn">Create Room</button>
+      
+      <div class="divider"><span>OR</span></div>
+      
+      <div class="input-group">
+        <label for="room-id-input">Room ID</label>
+        <input type="text" id="room-id-input" placeholder="4-Letter Code" maxlength="4" style="text-transform: uppercase;" />
+      </div>
+      
+      <button id="btn-join-room" class="secondary-btn">Join Room</button>
+    </div>
+
+    <!-- View 2: Waiting Room -->
+    <div id="view-lobby" class="view">
+      <div class="header">
+        <h1>Room: <span id="lobby-room-id" class="highlight"></span></h1>
+      </div>
+      <div class="players-container">
+        <h2>Players (<span id="player-count">0</span>)</h2>
+        <ul id="lobby-players" class="player-list"></ul>
+      </div>
+      <button id="btn-start-game" class="primary-btn" style="display: none;">Start Game</button>
+      <p id="waiting-msg" class="info-text">Waiting for host to start...</p>
+    </div>
+
+    <!-- View 3: Game Board -->
+    <div id="view-playing" class="view playing-view">
+      <div class="header game-header">
+        <div class="room-info">Room: <span id="playing-room-id" class="highlight"></span></div>
+        <button id="btn-pass" class="danger-btn">Pass Turn</button>
+      </div>
+      
+      <div class="scoreboard-container">
+        <div class="scoreboard" id="playing-scoreboard"></div>
+      </div>
+
+      <div class="word-pool-container">
+        <div id="word-pool" class="word-pool"></div>
+      </div>
+
+      <div class="input-area">
+        <input type="text" id="sentence-input" placeholder="Build a sentence using available words..." autocomplete="off" />
+        <button id="btn-submit-sentence" class="primary-btn">Submit</button>
+      </div>
+    </div>
+
+    <!-- View 4: Game Over -->
+    <div id="view-finished" class="view">
+      <h1>Game Over</h1>
+      
+      <div class="final-scores-container">
+        <h2>Final Rankings</h2>
+        <ul id="final-scoreboard" class="player-list"></ul>
+      </div>
+
+      <button id="btn-play-again" class="primary-btn" style="display: none;">Play Again</button>
+      <p id="finished-waiting-msg" class="info-text">Waiting for host...</p>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

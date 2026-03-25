@@ -307,6 +307,12 @@ button:disabled {
   width: auto;
 }
 
+.sentence-grammar-error {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  color: #ef4444;
+}
+
 /* Finished View */
 .final-scores-container {
   background-color: #0f172a;

@@ -1,5 +1,47 @@
 import { ref, set, get, onValue, update, runTransaction, onDisconnect } from "firebase/database";
+import { retext } from "retext";
+import retextPos from "retext-pos";
+import { VFile } from "vfile";
 import { db } from "./firebase.js";
+
+const grammarProcessor = retext().use(retextPos);
+
+const NOUN_LIKE_POS = new Set(["NN", "NNS", "NNP", "NNPS", "PRP", "WP"]);
+
+function isVerbPos(tag) {
+  return Boolean(tag && /^VB/.test(tag));
+}
+
+function walkNlcst(node, visit) {
+  if (!node) return;
+  visit(node);
+  const kids = node.children;
+  if (!kids) return;
+  for (let i = 0; i < kids.length; i++) {
+    walkNlcst(kids[i], visit);
+  }
+}
+
+async function validateSentence(text) {
+  try {
+    const file = new VFile(text);
+    const tree = grammarProcessor.parse(file);
+    await grammarProcessor.run(tree, file);
+    let hasNounLike = false;
+    let hasVerb = false;
+    walkNlcst(tree, (node) => {
+      if (node.type !== "WordNode") return;
+      const tag = node.data?.partOfSpeech;
+      if (!tag) return;
+      if (NOUN_LIKE_POS.has(tag)) hasNounLike = true;
+      if (isVerbPos(tag)) hasVerb = true;
+    });
+    return hasNounLike && hasVerb;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
 
 // --- Game Dictionary & Config ---
 const WORD_DICTIONARY = [
@@ -50,6 +92,21 @@ const allViews = [viewJoin, viewLobby, viewPlaying, viewFinished];
 const playerNameInput = document.getElementById('player-name');
 const roomIdInput = document.getElementById('room-id-input');
 const sentenceInput = document.getElementById('sentence-input');
+const sentenceGrammarError = document.getElementById('sentence-grammar-error');
+
+const GRAMMAR_ERROR_TEXT = 'A sentence needs at least a subject and an action!';
+
+function clearGrammarError() {
+  if (!sentenceGrammarError) return;
+  sentenceGrammarError.hidden = true;
+  sentenceGrammarError.textContent = '';
+}
+
+function showGrammarError() {
+  if (!sentenceGrammarError) return;
+  sentenceGrammarError.textContent = GRAMMAR_ERROR_TEXT;
+  sentenceGrammarError.hidden = false;
+}
 
 // Buttons
 const btnCreateRoom = document.getElementById('btn-create-room');
@@ -340,7 +397,7 @@ btnPass.addEventListener('click', () => {
    }
 });
 
-const submitSentenceFn = () => {
+const submitSentenceFn = async () => {
    const sentence = sentenceInput.value.trim();
    if (!sentence) return;
    
@@ -382,9 +439,19 @@ const submitSentenceFn = () => {
    };
    
    if (!valid) {
+      clearGrammarError();
       failSubmission();
       return;
    }
+   
+   const grammarOk = await validateSentence(sentence);
+   if (!grammarOk) {
+      failSubmission();
+      showGrammarError();
+      return;
+   }
+   
+   clearGrammarError();
    
    // Server validation via transaction for atomicity
    btnSubmitSentence.disabled = true;
@@ -419,19 +486,23 @@ const submitSentenceFn = () => {
             }
             return pData;
          });
+         clearGrammarError();
          sentenceInput.value = '';
          sentenceInput.focus();
       } else {
+         clearGrammarError();
          failSubmission();
       }
    }).catch(err => {
       btnSubmitSentence.disabled = false;
       console.error(err);
+      clearGrammarError();
       failSubmission();
    });
 };
 
 btnSubmitSentence.addEventListener('click', submitSentenceFn);
+sentenceInput.addEventListener('input', clearGrammarError);
 sentenceInput.addEventListener('keypress', (e) => {
    if(e.key === 'Enter') {
       submitSentenceFn();

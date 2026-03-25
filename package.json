@@ -13,6 +13,9 @@
     "wrangler": "^4.77.0"
   },
   "dependencies": {
-    "firebase": "^10.7.0"
+    "firebase": "^10.7.0",
+    "retext": "^9.0.0",
+    "retext-pos": "^5.0.0",
+    "retext-stringify": "^4.0.0"
   }
 }

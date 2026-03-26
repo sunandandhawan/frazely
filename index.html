@@ -35,14 +35,16 @@
 
     <!-- View 2: Waiting Room -->
     <div id="view-lobby" class="view">
-      <div class="header">
+      <div class="header" style="flex-direction: column; gap: 8px;">
         <h1>Room: <span id="lobby-room-id" class="highlight"></span></h1>
+        <button id="btn-copy-link" class="secondary-btn" style="width: auto; padding: 6px 12px; font-size: 0.85rem;">Copy Invite Link</button>
       </div>
       <div class="players-container">
         <h2>Players (<span id="player-count">0</span>)</h2>
         <ul id="lobby-players" class="player-list"></ul>
       </div>
       <button id="btn-start-game" class="primary-btn" style="display: none;">Start Game</button>
+      <p id="min-player-msg" class="info-text" style="display: none; color: #fbbf24;">Waiting for more players to join...</p>
       <p id="waiting-msg" class="info-text">Waiting for host to start...</p>
     </div>
 

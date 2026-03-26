@@ -54,8 +54,6 @@ const WORD_DICTIONARY = [
    "happy", "sad", "angry", "exciting", "game", "winner", "story", "epic", "legendary"
 ];
 
-const WORD_COUNT = 75;
-
 function getRandomWords(count) {
    const shuffled = [...WORD_DICTIONARY].sort(() => 0.5 - Math.random());
    const words = {};
@@ -65,7 +63,7 @@ function getRandomWords(count) {
    return words;
 }
 
-async function fetchDynamicWords() {
+async function fetchDynamicWords(wordCount) {
    const BOOK_IDS = [67098, 11, 236, 55, 16, 43936];
    const randomId = BOOK_IDS[Math.floor(Math.random() * BOOK_IDS.length)];
    const url = `/${randomId}-0.txt`;
@@ -82,20 +80,20 @@ async function fetchDynamicWords() {
 
    const extractedWords = new Set();
 
-   while (extractedWords.size < WORD_COUNT) {
+   while (extractedWords.size < wordCount) {
       const randomParagraph = paragraphs[Math.floor(Math.random() * paragraphs.length)];
       const sanitized = randomParagraph.replace(/[^a-zA-Z\s]/g, "").replace(/\s+/g, " ").toLowerCase();
       const words = sanitized.split(" ");
 
       for (const word of words) {
          if (word.length > 0) extractedWords.add(word);
-         if (extractedWords.size >= WORD_COUNT) break;
+         if (extractedWords.size >= wordCount) break;
       }
    }
 
-   const resultWords = Array.from(extractedWords).slice(0, WORD_COUNT);
+   const resultWords = Array.from(extractedWords).slice(0, wordCount);
    const wordsObj = {};
-   for (let i = 0; i < WORD_COUNT; i++) {
+   for (let i = 0; i < wordCount; i++) {
       wordsObj[i] = { text: resultWords[i], available: true };
    }
    return wordsObj;
@@ -132,6 +130,19 @@ const roomIdInput = document.getElementById('room-id-input');
 const sentenceInput = document.getElementById('sentence-input');
 const sentenceGrammarError = document.getElementById('sentence-grammar-error');
 
+document.addEventListener('DOMContentLoaded', () => {
+   const urlParams = new URLSearchParams(window.location.search);
+   const roomParam = urlParams.get('room');
+   if (roomParam && roomParam.length === 4) {
+      roomIdInput.value = roomParam.toUpperCase();
+      const btnCreateRoom = document.getElementById('btn-create-room');
+      const divider = document.querySelector('.divider');
+      if (btnCreateRoom) btnCreateRoom.style.display = 'none';
+      if (divider) divider.style.display = 'none';
+      playerNameInput.focus();
+   }
+});
+
 const GRAMMAR_ERROR_TEXT = 'A sentence needs at least a subject and an action!';
 
 function clearGrammarError() {
@@ -153,6 +164,17 @@ const btnStartGame = document.getElementById('btn-start-game');
 const btnPass = document.getElementById('btn-pass');
 const btnSubmitSentence = document.getElementById('btn-submit-sentence');
 const btnPlayAgain = document.getElementById('btn-play-again');
+
+const btnCopyLink = document.getElementById('btn-copy-link');
+if (btnCopyLink) {
+   btnCopyLink.addEventListener('click', () => {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+         const originalText = btnCopyLink.textContent;
+         btnCopyLink.textContent = 'Copied!';
+         setTimeout(() => btnCopyLink.textContent = originalText, 2000);
+      });
+   });
+}
 
 // Utility Functions
 let gameTimerInterval = null;
@@ -216,22 +238,15 @@ btnCreateRoom.addEventListener('click', async () => {
    const originalText = btnCreateRoom.textContent;
    btnCreateRoom.textContent = 'Creating...';
 
-   let words;
-   try {
-      words = await fetchDynamicWords();
-   } catch (e) {
-      console.error(e);
-      words = getRandomWords(WORD_COUNT);
-   }
-
    roomId = generateRoomId();
+   window.history.pushState({}, '', '?room=' + roomId);
    playerId = Math.random().toString(36).substring(2, 10);
    isHost = true;
    playerName = name;
 
    await set(ref(db, `rooms/${roomId}`), {
       state: 'lobby',
-      words: words,
+      words: null,
       players: {
          [playerId]: {
             name: playerName,
@@ -258,8 +273,14 @@ btnJoinRoom.addEventListener('click', async () => {
    btnJoinRoom.disabled = true;
    const stateSnap = await get(ref(db, `rooms/${rInput}/state`));
 
-   if (stateSnap.exists() && stateSnap.val() === 'lobby') {
+   if (stateSnap.exists() && (stateSnap.val() === 'lobby' || stateSnap.val() === 'playing')) {
       roomId = rInput;
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('room') !== roomId) {
+         window.history.pushState({}, '', '?room=' + roomId);
+      }
+      
       playerId = Math.random().toString(36).substring(2, 10);
       isHost = false;
       playerName = name;
@@ -272,7 +293,7 @@ btnJoinRoom.addEventListener('click', async () => {
       });
       setupRoomListeners();
    } else {
-      alert("Room not found or game already in progress!");
+      alert("Room not found!");
       btnJoinRoom.disabled = false;
    }
 });
@@ -294,6 +315,9 @@ const setupRoomListeners = () => {
          document.getElementById('lobby-room-id').textContent = roomId;
          btnStartGame.style.display = isHost ? 'block' : 'none';
          document.getElementById('waiting-msg').style.display = isHost ? 'none' : 'block';
+         
+         const minPlayerMsg = document.getElementById('min-player-msg');
+         if (minPlayerMsg) minPlayerMsg.style.display = 'none';
 
          // reset join/create buttons in case user goes back somehow (though UI doesn't allow it right now)
          btnCreateRoom.disabled = false;
@@ -332,24 +356,48 @@ const setupRoomListeners = () => {
       if (!players[playerId]) return; // we were kicked/removed
       if (players[playerId].isHost !== isHost) {
          isHost = players[playerId].isHost;
-         btnStartGame.style.display = isHost && roomStateVar === 'lobby' ? 'block' : 'none';
-         document.getElementById('waiting-msg').style.display = isHost ? 'none' : 'block';
+      }
+
+      const numPlayers = Object.keys(players).length;
+      document.getElementById('player-count').textContent = numPlayers;
+
+      // Update minimum player UI constraints if in lobby
+      if (roomStateVar === 'lobby') {
+         if (isHost) {
+            btnStartGame.style.display = 'block';
+            document.getElementById('waiting-msg').style.display = 'none';
+            if (numPlayers < 2) {
+               btnStartGame.disabled = true;
+               if (document.getElementById('min-player-msg')) document.getElementById('min-player-msg').style.display = 'block';
+            } else {
+               btnStartGame.disabled = false;
+               if (document.getElementById('min-player-msg')) document.getElementById('min-player-msg').style.display = 'none';
+            }
+         } else {
+            btnStartGame.style.display = 'none';
+            document.getElementById('waiting-msg').style.display = 'block';
+            if (document.getElementById('min-player-msg')) document.getElementById('min-player-msg').style.display = 'none';
+         }
       }
 
       // Re-render lobby players
       const lobbyUl = document.getElementById('lobby-players');
       lobbyUl.innerHTML = '';
-      document.getElementById('player-count').textContent = Object.keys(players).length;
 
       const playingScores = document.getElementById('playing-scoreboard');
       playingScores.innerHTML = '';
 
-      const sorted = Object.values(players).sort((a, b) => b.score - a.score);
+      const sortedKeys = Object.keys(players).sort((a, b) => players[b].score - players[a].score);
 
-      sorted.forEach(p => {
+      sortedKeys.forEach(pId => {
+         const p = players[pId];
+         const isMe = pId === playerId;
+         const youStr = isMe ? ' <span class="highlight" style="font-size: 0.85rem;">(You)</span>' : '';
+
          // Lobby Rendering
          const li = document.createElement('li');
-         li.innerHTML = `<span>${p.name}</span>`;
+         if (isMe) li.classList.add('highlight-me');
+         li.innerHTML = `<span>${p.name}${youStr}</span>`;
          if (p.isHost) {
             li.innerHTML += `<span class="host-badge">Host</span>`;
          }
@@ -357,8 +405,10 @@ const setupRoomListeners = () => {
 
          // Playing Rendering
          const div = document.createElement('div');
-         div.className = p.passed ? 'score-item passed' : 'score-item';
-         div.textContent = `${p.name}: ${p.score}`;
+         let dClass = p.passed ? 'score-item passed' : 'score-item';
+         if (isMe) dClass += ' highlight-me';
+         div.className = dClass;
+         div.innerHTML = `${p.name}${youStr}: ${p.score}`;
          playingScores.appendChild(div);
       });
 
@@ -427,10 +477,15 @@ function renderFinalScoreboard() {
    finalUl.innerHTML = '';
    if (!currentPlayersState) return;
 
-   const sorted = Object.values(currentPlayersState).sort((a, b) => b.score - a.score);
-   sorted.forEach((p, index) => {
+   const sortedKeys = Object.keys(currentPlayersState).sort((a, b) => currentPlayersState[b].score - currentPlayersState[a].score);
+   sortedKeys.forEach((pId, index) => {
+      const p = currentPlayersState[pId];
+      const isMe = pId === playerId;
+      const youStr = isMe ? ' <span class="highlight" style="font-size: 0.85rem;">(You)</span>' : '';
+
       const li = document.createElement('li');
       li.className = 'rank-item';
+      if (isMe) li.classList.add('highlight-me');
 
       let rankClass = '';
       if (index === 0) rankClass = 'rank-1';
@@ -439,7 +494,7 @@ function renderFinalScoreboard() {
 
       li.innerHTML = `
          <span style="width: 40px; font-weight: bold;" class="${rankClass}">#${index + 1}</span>
-         <span style="flex: 1;" class="${rankClass}">${p.name}</span>
+         <span style="flex: 1;" class="${rankClass}">${p.name}${youStr}</span>
          <span style="font-weight: bold;" class="${rankClass}">${p.score} pts</span>
       `;
       finalUl.appendChild(li);
@@ -451,10 +506,24 @@ btnStartGame.addEventListener('click', async () => {
    if (!isHost || !roomId) return;
 
    btnStartGame.disabled = true;
+   const originalText = btnStartGame.textContent;
+   btnStartGame.textContent = 'Generating...';
+
+   const playerCount = Object.keys(currentPlayersState).length;
+   const targetWordCount = Math.max(40, Math.min(100, playerCount * 20));
+
+   let words;
+   try {
+      words = await fetchDynamicWords(targetWordCount);
+   } catch (e) {
+      console.error(e);
+      words = getRandomWords(targetWordCount);
+   }
 
    const updates = {};
    updates['state'] = 'playing';
    updates['timerEndAt'] = Date.now() + 5 * 60 * 1000;
+   updates['words'] = words;
 
    // Reset passed status
    for (let pId in currentPlayersState) {
@@ -464,6 +533,7 @@ btnStartGame.addEventListener('click', async () => {
    await update(ref(db, `rooms/${roomId}`), updates);
 
    btnStartGame.disabled = false;
+   btnStartGame.textContent = originalText;
 });
 
 btnPlayAgain.addEventListener('click', async () => {
@@ -473,17 +543,9 @@ btnPlayAgain.addEventListener('click', async () => {
    const originalText = btnPlayAgain.textContent;
    btnPlayAgain.textContent = 'Restarting...';
 
-   let words;
-   try {
-      words = await fetchDynamicWords();
-   } catch (e) {
-      console.error(e);
-      words = getRandomWords(WORD_COUNT);
-   }
-
    const updates = {};
    updates['state'] = 'lobby';
-   updates['words'] = words;
+   updates['words'] = null;
    updates['timerEndAt'] = null;
 
    for (let pId in currentPlayersState) {
